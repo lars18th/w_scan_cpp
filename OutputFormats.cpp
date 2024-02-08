@@ -381,32 +381,28 @@ void PrintSatellitesDat(std::vector<TChannel>& List) {
      else
         ss << "{5 , ";
 
-     s = std::to_string(t.Frequency);
-     while(s.size() < 5) s += ' ';
-     ss << s << ", ";
+     ss << FrontFill(IntToStr(t.Frequency), 5) << ", ";
  
      if (t.Polarization == 'H')       ss << "0";
      else if (t.Polarization == 'V')  ss << "1";
      else if (t.Polarization == 'L')  ss << "2";
      else if (t.Polarization == 'R')  ss << "3";
      ss << ", ";
- 
-     s = std::to_string(t.Symbolrate);
-     while(s.size() < 5) s += ' ';
-     ss << s << ", ";
 
-     if (t.FEC == 0)        ss << "0 ";
-     else if (t.FEC == 12)  ss << "1 ";
-     else if (t.FEC == 23)  ss << "2 ";
-     else if (t.FEC == 34)  ss << "3 ";
-     else if (t.FEC == 45)  ss << "4 ";
-     else if (t.FEC == 56)  ss << "5 ";
-     else if (t.FEC == 67)  ss << "6 ";
-     else if (t.FEC == 78)  ss << "7 ";
-     else if (t.FEC == 89)  ss << "8 ";
-     else if (t.FEC == 35)  ss << "10";
-     else if (t.FEC == 910) ss << "11";
-     else                   ss << "9 ";
+     ss << FrontFill(IntToStr(t.Symbolrate), 5) << ", "; 
+
+     if (t.FEC == 0)        ss << FrontFill("0" ,2);
+     else if (t.FEC == 12)  ss << FrontFill("1" ,2);
+     else if (t.FEC == 23)  ss << FrontFill("2" ,2);
+     else if (t.FEC == 34)  ss << FrontFill("3" ,2);
+     else if (t.FEC == 45)  ss << FrontFill("4" ,2);
+     else if (t.FEC == 56)  ss << FrontFill("5" ,2);
+     else if (t.FEC == 67)  ss << FrontFill("6" ,2);
+     else if (t.FEC == 78)  ss << FrontFill("7" ,2);
+     else if (t.FEC == 89)  ss << FrontFill("8" ,2);
+     else if (t.FEC == 35)  ss << FrontFill("10",2);
+     else if (t.FEC == 910) ss << FrontFill("11",2);
+     else                   ss << FrontFill("9" ,2);
      ss << ", ";
 
      if (t.Rolloff == 35)      ss << "0";
@@ -415,12 +411,16 @@ void PrintSatellitesDat(std::vector<TChannel>& List) {
      else                      ss << "3";
      ss << ", ";
 
-     if (t.Modulation == 2)      ss << "0 ";
-     else if (t.Modulation == 5) ss << "9 ";
-     else if (t.Modulation == 6) ss << "10";
-     else if (t.Modulation == 7) ss << "11";
-     else                        ss << "6 ";
-     ss << "},              // "
+     if (t.Modulation == 2)      ss << FrontFill("0" ,2);
+     else if (t.Modulation == 5) ss << FrontFill("9" ,2);
+     else if (t.Modulation == 6) ss << FrontFill("10",2);
+     else if (t.Modulation == 7) ss << FrontFill("11",2);
+     else                        ss << FrontFill("6" ,2);
+     ss << ", ";
+
+     ss << FrontFill(IntToStr(t.StreamId),3);
+
+     ss << "},          // "
         << "NID = " << std::to_string(t.NID)
         << ", "
         << "TID = " << std::to_string(t.TID)
@@ -738,6 +738,15 @@ void PrintDat(std::vector<TChannel>& List, std::string BinaryFile) {
 /*******************************************************************************
  * VLC output
  ******************************************************************************/
+void XmlString(std::string& s) {
+  if (s.empty()) return;
+  // those are the five predefined XML char entities
+  ReplaceAll(s, "&", "&amp;");
+  ReplaceAll(s, "<", "&lt;");
+  ReplaceAll(s, ">", "&gt;");
+  ReplaceAll(s, "'", "&apos;");
+  ReplaceAll(s, "\"", "&quot;");
+}
 
 void PrintVLC(std::vector<TChannel>& List) {
   std::stringstream ss;
@@ -777,18 +786,19 @@ void PrintVLC(std::vector<TChannel>& List) {
 
      std::string title;
      if (not c.Name.empty()) {
-        for(size_t p = c.Name.find('&'); p!=std::string::npos; p = c.Name.find('&', p+1))
-           c.Name.insert(p+1, "amp;");
         title = c.Name;
+        XmlString(title);
         }
      else
         title = "Channel";
      ss << INDENT << "<title>" << title << "</title>" << std::endl;
 
-     uint32_t freq_Hz;
+     uint64_t freq_Hz = c.Frequency;
+     auto freq_Min = [](std::string Source) -> uint64_t {
+        return (Source.find('S') == 0) ? 3000000000ULL : 50000000ULL;
+        };
 
-     freq_Hz = c.Frequency;
-     while(freq_Hz && (freq_Hz < 1000000)) freq_Hz *= 1000;
+     while(freq_Hz && (freq_Hz < freq_Min(c.Source))) freq_Hz *= 1000;
 
      if (c.Source == "A") {
         ss << INDENT << "<location>atsc://frequency=" << freq_Hz << "</location>" << std::endl;
@@ -927,10 +937,9 @@ void PrintVLC(std::vector<TChannel>& List) {
         ss << INDENT << "</extension>" << std::endl;
         }
      if (c.Source.find('S') == 0) {
-        uint32_t freq_MHz = c.Frequency;
         ss << INDENT << "<location>dvb-s";
         if (c.DelSys == 1) ss << "2";
-        ss << "://frequency=" << freq_MHz << "</location>" << std::endl;
+        ss << "://frequency=" << freq_Hz << "</location>" << std::endl;
 
         ss << INDENT << "<extension" << " application=" << '"' << AppUrl << '"' << ">" << std::endl;
         indent++;
@@ -1052,9 +1061,8 @@ void PrintVLCsatip(std::vector<TChannel>& List) {
 
      std::string title;
      if (not c.Name.empty()) {
-        for(size_t p = c.Name.find('&'); p!=std::string::npos; p = c.Name.find('&', p+1))
-           c.Name.insert(p+1, "amp;");
         title = c.Name;
+        XmlString(title);
         }
      else
         title += ". Channel";
@@ -1425,9 +1433,9 @@ void PrintXML(std::vector<TChannel>& List) {
   std::stringstream ss;
   size_t indent = 0;
 
-  ss << "<?xml version=" << '"' << "1.0" << " ?>" << std::endl;
+  ss << "<?xml version=" << '"' << "1.0" << '"' << "?>" << std::endl;
   ss << "<!DOCTYPE service_list SYSTEM " << '"'
-     << "https://gen2vdr.de/wirbel/w_scan/dtd/service_list.dtd"
+     << "https://www.gen2vdr.de/wirbel/w_scan_cpp/service_list.dtd"
      << '"' << ">" << std::endl << std::endl;
   ss << "<!-- NOTE:" << std::endl;
   ss << "     if reading or writing w_scan XML file format:" << std::endl;
@@ -1603,9 +1611,18 @@ void PrintXML(std::vector<TChannel>& List) {
         << " SID="  << '"' << c.SID  << '"'
         << ">" << std::endl;  indent++;
 
-     if (not c.Name.empty())     ss << INDENT << "<name char256="     << '"' << c.Name     << '"' << "/>" << std::endl;
-     if (not c.Provider.empty()) ss << INDENT << "<provider char256=" << '"' << c.Provider << '"' << "/>" << std::endl;
-     if (c.PCR != 0)             ss << INDENT << "<pcr pid="          << '"' << c.PCR                      << '"' << "/>" << std::endl;
+     if (not c.Name.empty()) {
+        std::string name = c.Name;
+        XmlString(name);
+        ss << INDENT << "<name char256=" << '"' << name << '"' << "/>" << std::endl;
+        }
+     if (not c.Provider.empty()) {
+        std::string provider = c.Provider;
+        XmlString(provider);
+        ss << INDENT << "<provider char256=" << '"' << provider << '"' << "/>" << std::endl;
+        }
+     if (c.PCR != 0)
+        ss << INDENT << "<pcr pid=" << '"' << c.PCR << '"' << "/>" << std::endl;
 
      ss << INDENT << "<streams>" << std::endl; indent++;
      if (c.VPID.PID != 0) {

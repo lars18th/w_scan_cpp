@@ -76,6 +76,8 @@ void WirbelscanDefaults(void) {
   WirbelscanSetup.scan_append_new = 1;
   WirbelscanSetup.HelpText = false;
   WirbelscanSetup.ParseLCN = false;
+  WirbelscanSetup.SignalWaitTime = 1;
+  WirbelscanSetup.LockTimeout = 3;
 }
 
 void WirbelscanUpdateSettings(void) {
@@ -95,6 +97,8 @@ void WirbelscanUpdateSettings(void) {
 //SendInteger("tp_only"           , WirbelscanSetup.tp_only);
   SendInteger("verbosity"         , WirbelscanSetup.verbosity);
   SendInteger("ParseLCN"          , WirbelscanSetup.ParseLCN?1:0);
+  SendInteger("SignalWaitTime"    , WirbelscanSetup.SignalWaitTime);
+  SendInteger("LockTimeout"       , WirbelscanSetup.LockTimeout);
   #undef SendInteger
 }
 
@@ -124,6 +128,7 @@ bool ParseArguments(int argc, char* argv[]) {
   std::string RotorUsals;
   std::string Scr;
   std::string Source("S19.2E");
+  std::string SatipSrc("1");
   int RotorPosition = 9999;
   bool use_satip = false;
 
@@ -270,9 +275,21 @@ bool ParseArguments(int argc, char* argv[]) {
         WirbelscanSetup.adapter = Param;
         i++;
         }
+     else if (Argument == "--signal-wait-time") {
+        PARAM(IntRange(1,5));
+        WirbelscanSetup.SignalWaitTime = std::stol(Param);
+        }
+     else if (Argument == "--lock-timeout") {
+        PARAM(IntRange(1,10));
+        WirbelscanSetup.LockTimeout = std::stol(Param);
+        }
      else if (Argument == "--satip-server") {
         WirbelscanSetup.SatipSvr = Param;
         i++;
+        }
+     else if (Argument == "--satip-src") {
+        PARAM(IntRange(1,255));
+        SatipSrc = Param;
         }
      else if ((Argument == "-i") or (Argument == "--inversion")) {
         PARAM("0,1,2");
@@ -414,6 +431,11 @@ bool ParseArguments(int argc, char* argv[]) {
      case 1 /* C */: break;
      case 2 /* S */:
         {
+        if (use_satip) {
+           cSource* s = new cSource;
+           s->Parse((Source + " " + SatipSrc).c_str());
+           Sources.Add(s);
+           }
         if (not DiseqcSwitch.empty())
            DiseqcSwitchConfig(Source, Setup.LnbFrequLo, Setup.LnbFrequHi, Setup.LnbSLOF, DiseqcSwitch);
         else if (not Scr.empty())
@@ -522,6 +544,15 @@ bool ExtHelpText(std::string ProgName) {
   ss << "       -a N, --adapter N" << std::endl;
   ss << "               use device /dev/dvb/adapterN/ [default: auto detect]" << std::endl;
   ss << "               (also allowed: -a /dev/dvb/adapterN/frontendM)" << std::endl;
+  ss << "       --signal-wait-time N" << std::endl;
+  ss << "               wait time in seconds before the presence of some antenna signal is checked" << std::endl;
+  ss << "               after a channel change. Increasing this value will slow down scans, but" << std::endl;
+  ss << "               may help for some devices." << std::endl;
+  ss << "               Valid range for N is 1 to 5. [default: 1]" << std::endl;
+  ss << "       --lock-timeout N" << std::endl;
+  ss << "               timeout in seconds for full lock detection after antenna signal" << std::endl;
+  ss << "               was detected." << std::endl;
+  ss << "               Valid range for N is 1 to 10. [default: 3]" << std::endl; 
   ss << "       --satip-server <STRING>" << std::endl;
   ss << "               do not auto detect satip server," << std::endl;
   ss << "               but use manual server settings, ie." << std::endl;
@@ -532,6 +563,11 @@ bool ExtHelpText(std::string ProgName) {
   ss << "               for detailed description, refer to vdr-plugin-satip's README." << std::endl;
   ss << "               NOTE: If the satip server quirk 0x08 is set," << std::endl;
   ss << "                     RTP over TCP is used instead of unicast." << std::endl;
+  ss << "       --satip-src N" << std::endl;
+  ss << "               selects the satellite orbital position for SAT>IP by index N (1 .. 255)." << std::endl;
+  ss << "               The number of supported positions depends on the SAT>IP server." << std::endl;
+  ss << "                       1   = first position [default]" << std::endl;
+  ss << "                       255 = last position" << std::endl;
   ss << ".................DVB-C..................." << std::endl;
   ss << "       -i N, --inversion N" << std::endl;
   ss << "               spectral inversion setting for cable TV" << std::endl;
